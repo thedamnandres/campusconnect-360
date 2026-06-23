@@ -5,6 +5,26 @@ import Navbar from '../../components/Navbar'
 
 const API = 'http://localhost:8001'
 
+// Definido FUERA del componente para que su referencia sea estable entre renders.
+// Si se define dentro, React remonta el input en cada tecla y se pierde el foco.
+function Field({ label, name, type = 'text', required = false, value, onChange, ...rest }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>
+        {label} {required && <span style={{ color: 'var(--red)' }}>*</span>}
+      </label>
+      <input
+        type={type}
+        name={name}
+        value={value}
+        onChange={onChange}
+        required={required}
+        {...rest}
+      />
+    </div>
+  )
+}
+
 export default function StudentForm() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
@@ -24,8 +44,12 @@ export default function StudentForm() {
   const token = localStorage.getItem('token')
   const headers = { Authorization: `Bearer ${token}` }
 
+  const NUMERIC_FIELDS = ['cedula', 'phone', 'representative_phone']
+
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    const cleaned = NUMERIC_FIELDS.includes(name) ? value.replace(/\D/g, '') : value
+    setForm({ ...form, [name]: cleaned })
   }
 
   const handleSubmit = async (e) => {
@@ -41,21 +65,6 @@ export default function StudentForm() {
       setLoading(false)
     }
   }
-
-  const Field = ({ label, name, type = 'text', required = false }) => (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>
-        {label} {required && <span style={{ color: 'var(--red)' }}>*</span>}
-      </label>
-      <input
-        type={type}
-        name={name}
-        value={form[name]}
-        onChange={handleChange}
-        required={required}
-      />
-    </div>
-  )
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -83,12 +92,32 @@ export default function StudentForm() {
               Datos personales
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <Field label="Cédula" name="cedula" required />
-              <Field label="Fecha de nacimiento" name="birth_date" type="date" />
-              <Field label="Nombres" name="first_name" required />
-              <Field label="Apellidos" name="last_name" required />
-              <Field label="Email" name="email" type="email" required />
-              <Field label="Teléfono" name="phone" />
+              <Field
+                label="Cédula" name="cedula" required
+                value={form.cedula} onChange={handleChange}
+                inputMode="numeric" maxLength={10} placeholder="10 dígitos"
+              />
+              <Field
+                label="Fecha de nacimiento" name="birth_date" type="date"
+                value={form.birth_date} onChange={handleChange}
+              />
+              <Field
+                label="Nombres" name="first_name" required
+                value={form.first_name} onChange={handleChange}
+              />
+              <Field
+                label="Apellidos" name="last_name" required
+                value={form.last_name} onChange={handleChange}
+              />
+              <Field
+                label="Email" name="email" type="email" required
+                value={form.email} onChange={handleChange}
+              />
+              <Field
+                label="Teléfono" name="phone"
+                value={form.phone} onChange={handleChange}
+                inputMode="tel" maxLength={10} placeholder="0999999999"
+              />
             </div>
           </div>
 
@@ -99,10 +128,20 @@ export default function StudentForm() {
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div style={{ gridColumn: '1 / -1' }}>
-                <Field label="Nombre completo" name="representative_name" />
+                <Field
+                  label="Nombre completo" name="representative_name"
+                  value={form.representative_name} onChange={handleChange}
+                />
               </div>
-              <Field label="Email" name="representative_email" type="email" />
-              <Field label="Teléfono" name="representative_phone" />
+              <Field
+                label="Email" name="representative_email" type="email"
+                value={form.representative_email} onChange={handleChange}
+              />
+              <Field
+                label="Teléfono" name="representative_phone"
+                value={form.representative_phone} onChange={handleChange}
+                inputMode="tel" maxLength={10} placeholder="0999999999"
+              />
             </div>
           </div>
 
