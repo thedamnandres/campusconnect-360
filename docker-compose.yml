@@ -1,0 +1,245 @@
+version: "3.9"
+
+services:
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: cc360-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # Management UI: http://localhost:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cc360-net
+
+  db-academic:
+    image: postgres:16-alpine
+    container_name: cc360-db-academic
+    environment:
+      POSTGRES_DB: academic_db
+      POSTGRES_USER: academic_user
+      POSTGRES_PASSWORD: academic_pass
+    volumes:
+      - db_academic_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U academic_user -d academic_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cc360-net
+
+  db-payment:
+    image: postgres:16-alpine
+    container_name: cc360-db-payment
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: payment_user
+      POSTGRES_PASSWORD: payment_pass
+    volumes:
+      - db_payment_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment_user -d payment_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cc360-net
+
+  db-notification:
+    image: postgres:16-alpine
+    container_name: cc360-db-notification
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: notification_pass
+    volumes:
+      - db_notification_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notification_user -d notification_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cc360-net
+
+  db-attendance:
+    image: postgres:16-alpine
+    container_name: cc360-db-attendance
+    environment:
+      POSTGRES_DB: attendance_db
+      POSTGRES_USER: attendance_user
+      POSTGRES_PASSWORD: attendance_pass
+    volumes:
+      - db_attendance_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U attendance_user -d attendance_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cc360-net
+
+  db-analytics:
+    image: postgres:16-alpine
+    container_name: cc360-db-analytics
+    environment:
+      POSTGRES_DB: analytics_db
+      POSTGRES_USER: analytics_user
+      POSTGRES_PASSWORD: analytics_pass
+    volumes:
+      - db_analytics_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analytics_user -d analytics_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cc360-net
+
+  academic-service:
+    build: ./academic-service
+    container_name: cc360-academic
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql://academic_user:academic_pass@db-academic:5432/academic_db
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      JWT_SECRET: supersecretkey_change_in_prod
+      SERVICE_PORT: 8001
+    depends_on:
+      db-academic:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - cc360-net
+    restart: on-failure
+
+  payment-service:
+    build: ./payment-service
+    container_name: cc360-payment
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: postgresql://payment_user:payment_pass@db-payment:5432/payment_db
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      ACADEMIC_SERVICE_URL: http://academic-service:8001
+      JWT_SECRET: supersecretkey_change_in_prod
+      SERVICE_PORT: 8002
+    depends_on:
+      db-payment:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - cc360-net
+    restart: on-failure
+
+  notification-service:
+    build: ./notification-service
+    container_name: cc360-notification
+    ports:
+      - "8003:8003"
+    environment:
+      DATABASE_URL: postgresql://notification_user:notification_pass@db-notification:5432/notification_db
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      JWT_SECRET: supersecretkey_change_in_prod
+      SERVICE_PORT: 8003
+    depends_on:
+      db-notification:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - cc360-net
+    restart: on-failure
+
+  attendance-service:
+    build: ./attendance-service
+    container_name: cc360-attendance
+    ports:
+      - "8004:8004"
+    environment:
+      DATABASE_URL: postgresql://attendance_user:attendance_pass@db-attendance:5432/attendance_db
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      ACADEMIC_SERVICE_URL: http://academic-service:8001
+      JWT_SECRET: supersecretkey_change_in_prod
+      SERVICE_PORT: 8004
+    depends_on:
+      db-attendance:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - cc360-net
+    restart: on-failure
+
+  analytics-service:
+    build: ./analytics-service
+    container_name: cc360-analytics
+    ports:
+      - "8005:8005"
+    environment:
+      DATABASE_URL: postgresql://analytics_user:analytics_pass@db-analytics:5432/analytics_db
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      JWT_SECRET: supersecretkey_change_in_prod
+      SERVICE_PORT: 8005
+    depends_on:
+      db-analytics:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - cc360-net
+    restart: on-failure
+
+  gateway:
+    image: nginx:1.25-alpine
+    container_name: cc360-gateway
+    ports:
+      - "80:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - academic-service
+      - payment-service
+      - notification-service
+      - attendance-service
+      - analytics-service
+    networks:
+      - cc360-net
+    restart: on-failure
+
+  frontend:
+    build: ./frontend
+    container_name: cc360-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: http://localhost:80
+    depends_on:
+      - gateway
+    networks:
+      - cc360-net
+
+volumes:
+  rabbitmq_data:
+  db_academic_data:
+  db_payment_data:
+  db_notification_data:
+  db_attendance_data:
+  db_analytics_data:
+
+networks:
+  cc360-net:
+    driver: bridge
