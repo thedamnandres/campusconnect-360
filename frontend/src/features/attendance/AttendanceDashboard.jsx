@@ -85,6 +85,18 @@ export default function AttendanceDashboard() {
       .slice(0, 8)
   }, [attendanceHistory, incidentHistory])
 
+  function getAvance(row) {
+    if (row.event === 'AttendanceRecorded') {
+      if (row.detail === 'presente') return 100
+      if (row.detail === 'tardanza') return 60
+      return 0 // ausente
+    }
+    // IncidentReported: severidad como indicador de atención requerida
+    if (row.detail === 'alta') return 100
+    if (row.detail === 'media') return 60
+    return 30 // baja
+  }
+
   const saveAttendance = async (event) => {
     event.preventDefault()
     if (!selected) return
@@ -281,8 +293,8 @@ export default function AttendanceDashboard() {
                   <td>{row.type}</td>
                   <td>
                     <span className="cc-rate">
-                      <span className="cc-rate-bar"><span style={{ width: row.event === 'IncidentReported' ? '65%' : '90%' }} /></span>
-                      {row.event === 'IncidentReported' ? '65%' : '90%'}
+                      <span className="cc-rate-bar"><span style={{ width: `${getAvance(row)}%` }} /></span>
+                      {getAvance(row)}%
                     </span>
                   </td>
                   <td>{row.detail}</td>
