@@ -7,6 +7,20 @@ function money(value) {
   return new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(Number(value || 0))
 }
 
+function paymentAvance(status) {
+  if (status === 'confirmado') return 100
+  if (status === 'pendiente') return 50
+  return 0 // fallido
+}
+
+function lastThreeMonths() {
+  const now = new Date()
+  return [2, 1, 0].map((offset) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1)
+    return d.toLocaleString('es-EC', { month: 'short' })
+  })
+}
+
 function statusChip(status) {
   if (status === 'confirmado') return <span className="cc-chip green">Confirmado</span>
   if (status === 'fallido') return <span className="cc-chip red">Fallido</span>
@@ -113,20 +127,19 @@ export default function Payments() {
           </div>
           <div className="cc-metric-value">{money(metrics.pendingAmount)}<span className="cc-chip red">Pendiente</span></div>
           <div className="cc-bars" aria-hidden="true">
-            {[
-              [metrics.pending || 1, 'Oct'],
-              [Math.max(metrics.confirmed, 1), 'Nov'],
-              [Math.max(metrics.pending + metrics.confirmed, 1), 'Dic'],
-            ].map(([count, label], index) => (
-              <div key={label}>
-                <div className="cc-stack">
-                  {['var(--cc-purple)', 'var(--cc-purple-2)', 'var(--cc-blue)', 'var(--cc-teal)', 'var(--cc-mint)'].map((color, i) => (
-                    <span key={color} style={{ background: color, opacity: index === 1 && i > count % 5 ? 0.35 : 1 }} />
-                  ))}
+            {lastThreeMonths().map((label, index) => {
+              const count = index === 0 ? (metrics.pending || 1) : index === 1 ? Math.max(metrics.confirmed, 1) : Math.max(metrics.pending + metrics.confirmed, 1)
+              return (
+                <div key={label}>
+                  <div className="cc-stack">
+                    {['var(--cc-purple)', 'var(--cc-purple-2)', 'var(--cc-blue)', 'var(--cc-teal)', 'var(--cc-mint)'].map((color, i) => (
+                      <span key={color} style={{ background: color, opacity: index === 1 && i > count % 5 ? 0.35 : 1 }} />
+                    ))}
+                  </div>
+                  <p className="cc-stack-label">{label}</p>
                 </div>
-                <p className="cc-stack-label">{label}</p>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </article>
 
@@ -195,8 +208,8 @@ export default function Payments() {
                   <td>{payment.concept}</td>
                   <td>
                     <span className="cc-rate">
-                      <span className="cc-rate-bar"><span style={{ width: payment.status === 'confirmado' ? '80%' : '35%' }} /></span>
-                      {payment.status === 'confirmado' ? '80%' : '35%'}
+                      <span className="cc-rate-bar"><span style={{ width: `${paymentAvance(payment.status)}%` }} /></span>
+                      {paymentAvance(payment.status)}%
                     </span>
                   </td>
                   <td>{money(payment.amount)}</td>

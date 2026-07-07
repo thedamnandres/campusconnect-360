@@ -21,6 +21,8 @@ class AnalyticsRepository:
 
         if event_type == "StudentEnrolled":
             counters.total_students += 1
+        elif event_type == "PaymentCreated":
+            counters.total_payments_pending += 1
         elif event_type == "PaymentConfirmed":
             counters.total_payments_confirmed += 1
             if counters.total_payments_pending > 0:

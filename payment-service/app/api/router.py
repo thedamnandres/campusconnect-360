@@ -37,13 +37,13 @@ def get_student_payments(
     return payment_service.get_by_student(db, student_id)
 
 @router.post("/payments", response_model=PaymentResponse, status_code=201, tags=["Pagos"])
-def create_payment(
+async def create_payment(
     body: PaymentCreate,
     authorization: str = Header(...),
     db: Session = Depends(get_db),
     _: dict = Depends(require_role("finance", "admin"))
 ):
-    return payment_service.create_payment(db, body, authorization)
+    return await payment_service.create_payment_async(db, body, authorization)
 
 @router.post("/payments/{payment_id}/confirm", response_model=PaymentResponse, tags=["Pagos"])
 async def confirm_payment(

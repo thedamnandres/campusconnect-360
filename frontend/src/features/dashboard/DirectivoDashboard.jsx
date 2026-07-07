@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../../components/Icons'
 import { analyticsApi, healthApi, notificationApi } from '../../lib/api'
 
@@ -70,9 +70,19 @@ export default function DirectivoDashboard() {
     }
   }, [])
 
+  // Carga inicial
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDashboard()
+  }, [loadDashboard])
+
+  // Auto-refresh cada 30 segundos para reflejar nuevos eventos en tiempo casi-real
+  const intervalRef = useRef(null)
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      loadDashboard()
+    }, 30_000)
+    return () => clearInterval(intervalRef.current)
   }, [loadDashboard])
 
   const eventRows = useMemo(() => ([
@@ -198,19 +208,36 @@ export default function DirectivoDashboard() {
               <tr>
                 <td><strong>Académico</strong></td>
                 <td>Gestión académica</td>
-                <td><span className="cc-rate"><span className="cc-rate-bar"><span style={{ width: '40%' }} /></span>40%</span></td>
+                <td>
+                  {(() => {
+                    const pct = Math.min(dashboard.total_students * 10, 100)
+                    return <span className="cc-rate"><span className="cc-rate-bar"><span style={{ width: `${pct}%` }} /></span>{pct}%</span>
+                  })()}
+                </td>
                 <td>{dashboard.total_students} estudiantes</td>
               </tr>
               <tr>
                 <td><strong>Pagos</strong></td>
                 <td>Finanzas</td>
-                <td><span className="cc-rate"><span className="cc-rate-bar"><span style={{ width: '80%' }} /></span>80%</span></td>
+                <td>
+                  {(() => {
+                    const total = dashboard.total_payments_confirmed + dashboard.total_payments_pending
+                    const pct = total > 0 ? Math.round((dashboard.total_payments_confirmed / total) * 100) : 0
+                    return <span className="cc-rate"><span className="cc-rate-bar"><span style={{ width: `${pct}%` }} /></span>{pct}%</span>
+                  })()}
+                </td>
                 <td>{dashboard.total_payments_confirmed} confirmados</td>
               </tr>
               <tr>
                 <td><strong>Notificaciones</strong></td>
                 <td>Mensajería</td>
-                <td><span className="cc-rate"><span className="cc-rate-bar"><span style={{ width: failedNotifications.length ? '20%' : '90%' }} /></span>{failedNotifications.length ? '20%' : '90%'}</span></td>
+                <td>
+                  {(() => {
+                    const total = dashboard.total_notifications_sent + dashboard.total_notifications_failed
+                    const pct = total > 0 ? Math.round((dashboard.total_notifications_sent / total) * 100) : 100
+                    return <span className="cc-rate"><span className="cc-rate-bar"><span style={{ width: `${pct}%` }} /></span>{pct}%</span>
+                  })()}
+                </td>
                 <td>{failedNotifications.length} fallidas</td>
               </tr>
             </tbody>

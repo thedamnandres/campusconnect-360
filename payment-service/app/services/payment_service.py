@@ -55,6 +55,23 @@ class PaymentService:
             concept=data.concept,
         )
 
+    async def create_payment_async(self, db: Session, data: PaymentCreate, authorization: str) -> Payment:
+        """Versión async que además publica el evento PaymentCreated."""
+        payment = self.create_payment(db, data, authorization)
+        try:
+            await publish_event("PaymentCreated", {
+                "paymentId":   payment.id,
+                "studentId":   payment.student_id,
+                "schoolId":    payment.school_id,
+                "amount":      float(payment.amount),
+                "concept":     payment.concept,
+                "studentName": payment.student_name,
+            })
+        except Exception:
+            # No es crítico que falle el evento de creación
+            pass
+        return payment
+
     # CONFIRMACION DE PAGO
 
     async def confirm_payment(self, db: Session, payment_id: str) -> Payment:
