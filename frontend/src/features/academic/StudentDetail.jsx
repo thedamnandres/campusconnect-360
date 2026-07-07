@@ -1,24 +1,32 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import axios from 'axios'
-import Navbar from '../../components/Navbar'
-
-const API = 'http://localhost:8001'
+import { academicApi, attendanceApi, notificationApi, paymentApi } from '../../lib/api'
 
 export default function StudentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [student, setStudent] = useState(null)
+  const [payments, setPayments] = useState([])
+  const [attendances, setAttendances] = useState([])
+  const [incidents, setIncidents] = useState([])
+  const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
-
-  const token = localStorage.getItem('token')
-  const headers = { Authorization: `Bearer ${token}` }
 
   useEffect(() => {
     const fetchStudent = async () => {
       try {
-        const res = await axios.get(`${API}/students/${id}`, { headers })
-        setStudent(res.data)
+        const [studentRes, paymentRes, attendanceRes, incidentRes, notificationRes] = await Promise.all([
+          academicApi.getStudent(id),
+          paymentApi.getStudentPayments(id).catch(() => ({ data: [] })),
+          attendanceApi.getStudentAttendance(id).catch(() => ({ data: [] })),
+          attendanceApi.getStudentIncidents(id).catch(() => ({ data: [] })),
+          notificationApi.listStudentNotifications(id).catch(() => ({ data: [] })),
+        ])
+        setStudent(studentRes.data)
+        setPayments(paymentRes.data)
+        setAttendances(attendanceRes.data)
+        setIncidents(incidentRes.data)
+        setNotifications(notificationRes.data)
       } catch (err) {
         console.error(err)
       } finally {
@@ -49,24 +57,20 @@ export default function StudentDetail() {
   }
 
   if (loading) return (
-    <div style={{ minHeight: '100vh' }}>
-      <Navbar />
+    <div>
       <p style={{ padding: 32, color: 'var(--gray)' }}>Cargando...</p>
     </div>
   )
 
   if (!student) return (
-    <div style={{ minHeight: '100vh' }}>
-      <Navbar />
+    <div>
       <p style={{ padding: 32, color: 'var(--red)' }}>Estudiante no encontrado</p>
     </div>
   )
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <Navbar />
-
-      <div style={{ padding: '32px', maxWidth: 900, margin: '0 auto' }}>
+    <div>
+      <div style={{ maxWidth: 900 }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
@@ -94,10 +98,10 @@ export default function StudentDetail() {
             {getStatusBadge(student.financial_status)}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <InfoRow label="Email" value={student.email} />
+            <InfoRow label="Correo electrónico" value={student.email} />
             <InfoRow label="Teléfono" value={student.phone || '—'} />
             <InfoRow label="Fecha de nacimiento" value={student.birth_date || '—'} />
-            <InfoRow label="Colegio" value={student.school_id} />
+            <InfoRow label="Institución" value={student.school_id} />
           </div>
         </div>
 
@@ -109,12 +113,12 @@ export default function StudentDetail() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <InfoRow label="Nombre" value={student.representative_name || '—'} />
             <InfoRow label="Teléfono" value={student.representative_phone || '—'} />
-            <InfoRow label="Email" value={student.representative_email || '—'} />
+            <InfoRow label="Correo electrónico" value={student.representative_email || '—'} />
           </div>
         </div>
 
         {/* Matrículas */}
-        <div className="card">
+        <div className="card" style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid var(--gray-border)' }}>
             <h3 style={{ fontWeight: 600 }}>Matrículas</h3>
             <button
@@ -142,7 +146,7 @@ export default function StudentDetail() {
                 </tr>
               </thead>
               <tbody>
-                {student.enrollments.map((e, i) => (
+                {student.enrollments.map((e) => (
                   <tr
                     key={e.id}
                     style={{ borderTop: '1px solid var(--gray-border)' }}
@@ -158,6 +162,54 @@ export default function StudentDetail() {
                 ))}
               </tbody>
             </table>
+          )}
+        </div>
+
+        <div className="card">
+          <h3 style={{ fontWeight: 600, marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid var(--gray-border)' }}>
+            Historial básico de eventos asociados
+          </h3>
+          <table className="cc-table">
+            <thead>
+              <tr>
+                <th>ORIGEN</th>
+                <th>DETALLE</th>
+                <th>ESTADO / EVENTO</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.slice(0, 2).map((payment) => (
+                <tr key={payment.id}>
+                  <td><strong>Pagos</strong></td>
+                  <td>{payment.concept} · ${payment.amount}</td>
+                  <td><span className={payment.status === 'confirmado' ? 'cc-chip green' : 'cc-chip red'}>{payment.status}</span></td>
+                </tr>
+              ))}
+              {attendances.slice(0, 2).map((attendance) => (
+                <tr key={attendance.id}>
+                  <td><strong>Asistencia</strong></td>
+                  <td>{attendance.date}</td>
+                  <td><span className="cc-chip purple">Asistencia registrada</span></td>
+                </tr>
+              ))}
+              {incidents.slice(0, 2).map((incident) => (
+                <tr key={incident.id}>
+                  <td><strong>Bienestar</strong></td>
+                  <td>{incident.type} · {incident.severity}</td>
+                  <td><span className="cc-chip red">Incidente reportado</span></td>
+                </tr>
+              ))}
+              {notifications.slice(0, 2).map((notification) => (
+                <tr key={notification.id}>
+                  <td><strong>Notificación</strong></td>
+                  <td>{notification.message}</td>
+                  <td><span className={notification.status === 'enviada' ? 'cc-chip green' : 'cc-chip red'}>{notification.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {payments.length + attendances.length + incidents.length + notifications.length === 0 && (
+            <p className="cc-empty">Sin eventos asociados todavía.</p>
           )}
         </div>
 

@@ -1,9 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
-import Navbar from '../../components/Navbar'
-
-const API = 'http://localhost:8001'
+import { academicApi } from '../../lib/api'
 
 // Definido FUERA del componente para que su referencia sea estable entre renders.
 // Si se define dentro, React remonta el input en cada tecla y se pierde el foco.
@@ -41,9 +38,6 @@ export default function StudentForm() {
     representative_phone: '',
   })
 
-  const token = localStorage.getItem('token')
-  const headers = { Authorization: `Bearer ${token}` }
-
   const NUMERIC_FIELDS = ['cedula', 'phone', 'representative_phone']
 
   const handleChange = (e) => {
@@ -57,7 +51,7 @@ export default function StudentForm() {
     setLoading(true)
     setError('')
     try {
-      const res = await axios.post(`${API}/students`, form, { headers })
+      const res = await academicApi.createStudent(form)
       navigate(`/students/${res.data.id}`)
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al registrar estudiante')
@@ -67,10 +61,8 @@ export default function StudentForm() {
   }
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <Navbar />
-
-      <div style={{ padding: '32px', maxWidth: 720, margin: '0 auto' }}>
+    <div>
+      <div style={{ maxWidth: 720 }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
@@ -110,7 +102,7 @@ export default function StudentForm() {
                 value={form.last_name} onChange={handleChange}
               />
               <Field
-                label="Email" name="email" type="email" required
+                label="Correo electrónico" name="email" type="email" required
                 value={form.email} onChange={handleChange}
               />
               <Field
@@ -134,7 +126,7 @@ export default function StudentForm() {
                 />
               </div>
               <Field
-                label="Email" name="representative_email" type="email"
+                label="Correo electrónico" name="representative_email" type="email"
                 value={form.representative_email} onChange={handleChange}
               />
               <Field

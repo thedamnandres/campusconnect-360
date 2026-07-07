@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import axios from 'axios'
-import Navbar from '../../components/Navbar'
-
-const API = 'http://localhost:8001'
+import { Icon } from '../../components/Icons'
+import { academicApi } from '../../lib/api'
 
 const GRADES = [
   '1ro EGB', '2do EGB', '3ro EGB', '4to EGB', '5to EGB',
@@ -107,13 +105,10 @@ export default function EnrollmentForm() {
     notes: '',
   })
 
-  const token = localStorage.getItem('token')
-  const headers = { Authorization: `Bearer ${token}` }
-
   useEffect(() => {
     const fetchStudent = async () => {
       try {
-        const res = await axios.get(`${API}/students/${id}`, { headers })
+        const res = await academicApi.getStudent(id)
         setStudent(res.data)
       } catch (err) {
         console.error(err)
@@ -135,7 +130,7 @@ export default function EnrollmentForm() {
     setLoading(true)
     setError('')
     try {
-      await axios.post(`${API}/enrollments`, form, { headers })
+      await academicApi.enrollStudent(form)
       navigate(`/students/${id}`)
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al crear matrícula')
@@ -145,10 +140,8 @@ export default function EnrollmentForm() {
   }
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <Navbar />
-
-      <div style={{ padding: '32px', maxWidth: 640, margin: '0 auto' }}>
+    <div>
+      <div style={{ maxWidth: 640 }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
@@ -300,7 +293,7 @@ export default function EnrollmentForm() {
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0,
                 }}>
-                  <span style={{ color: 'white', fontSize: 16 }}>📚</span>
+                  <span style={{ color: 'white', display: 'flex' }}><Icon name="students" /></span>
                 </div>
                 <div>
                   <p style={{ fontWeight: 600, fontSize: 14 }}>
@@ -344,8 +337,8 @@ export default function EnrollmentForm() {
               gap: 10,
               alignItems: 'flex-start',
             }}>
-              <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>
-                {validation.type === 'error' ? '⛔' : '⚠️'}
+              <span style={{ display: 'flex', flexShrink: 0, marginTop: 1 }}>
+                <Icon name={validation.type === 'error' ? 'alert' : 'activity'} />
               </span>
               <div>
                 <p style={{ fontWeight: 600, marginBottom: 2 }}>

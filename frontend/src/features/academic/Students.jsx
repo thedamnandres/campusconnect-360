@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
-import Navbar from '../../components/Navbar'
-
-const API = 'http://localhost:8001'
+import { academicApi } from '../../lib/api'
 
 export default function Students() {
   const navigate = useNavigate()
@@ -11,16 +8,10 @@ export default function Students() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
 
-  const token = localStorage.getItem('token')
-  const headers = { Authorization: `Bearer ${token}` }
-
   const fetchStudents = async (q = '') => {
     setLoading(true)
     try {
-      const url = q
-        ? `${API}/students?q=${q}`
-        : `${API}/students`
-      const res = await axios.get(url, { headers })
+      const res = await academicApi.listStudents(q)
       setStudents(res.data)
     } catch (err) {
       console.error(err)
@@ -30,6 +21,7 @@ export default function Students() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStudents()
   }, [])
 
@@ -50,10 +42,8 @@ export default function Students() {
   }
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <Navbar />
-
-      <div style={{ padding: '32px', maxWidth: 1100, margin: '0 auto' }}>
+    <div>
+      <div>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -75,7 +65,7 @@ export default function Students() {
         <div className="card" style={{ marginBottom: 16, padding: 16 }}>
           <input
             type="text"
-            placeholder="Buscar por nombre, cédula o email..."
+            placeholder="Buscar por nombre, cédula o correo electrónico..."
             value={search}
             onChange={handleSearch}
           />
@@ -95,7 +85,7 @@ export default function Students() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--gray-light)', borderBottom: '1px solid var(--gray-border)' }}>
-                  {['Cédula', 'Nombre', 'Email', 'Estado financiero', 'Acciones'].map(h => (
+                  {['Cédula', 'Nombre', 'Correo electrónico', 'Estado financiero', 'Acciones'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, fontSize: 13 }}>
                       {h}
                     </th>

@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
-
-const API = 'http://localhost:8001'
+import { academicApi } from '../../lib/api'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -16,11 +14,12 @@ export default function Login() {
     setLoading(true)
     setError('')
     try {
-      const res = await axios.post(`${API}/auth/login`, form)
+      const res = await academicApi.login(form)
       localStorage.setItem('token', res.data.access_token)
       localStorage.setItem('username', form.username)
-      navigate('/students')
-    } catch (err) {
+      localStorage.setItem('role', getRole(form.username))
+      navigate(getHome(form.username))
+    } catch {
       setError('Usuario o contraseña incorrectos')
     } finally {
       setLoading(false)
@@ -191,4 +190,22 @@ export default function Login() {
       </div>
     </div>
   )
+}
+
+function getRole(username) {
+  const roles = {
+    secretaria: 'academic',
+    finanzas: 'finance',
+    docente: 'teacher',
+    director: 'director',
+    admin: 'admin',
+  }
+  return roles[username] || 'demo'
+}
+
+function getHome(username) {
+  if (username === 'finanzas') return '/payments'
+  if (username === 'docente') return '/wellbeing'
+  if (username === 'director') return '/dashboard'
+  return '/students'
 }
