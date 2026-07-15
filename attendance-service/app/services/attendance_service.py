@@ -66,6 +66,7 @@ class AttendanceService:
         await publish_event("IncidentReported", {
             "incidentId":  incident.id,
             "studentId":   incident.student_id,
+            "schoolId":    incident.school_id,
             "type":        incident.type.value,
             "description": incident.description,
             "severity":    incident.severity.value,

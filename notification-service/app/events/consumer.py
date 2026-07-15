@@ -45,6 +45,7 @@ async def process_message(message: aio_pika.IncomingMessage, exchange: aio_pika.
         event_type = data.get("eventType", "Unknown")
         correlation_id = data.get("correlationId", "")
         student_id = data.get("studentId") or data.get("student_id")
+        school_id = data.get("schoolId") or data.get("school_id")
 
         headers = dict(message.headers or {})
         retry_count = headers.get("x-retry-count", 0)
@@ -62,6 +63,7 @@ async def process_message(message: aio_pika.IncomingMessage, exchange: aio_pika.
                 notification = Notification(
                     id=str(uuid.uuid4()),
                     student_id=student_id,
+                    school_id=school_id,
                     type=notif_type,
                     message=notif_message,
                     status=NotificationStatusEnum.ENVIADA,
@@ -102,6 +104,7 @@ async def process_message(message: aio_pika.IncomingMessage, exchange: aio_pika.
                     failed_notif = Notification(
                         id=str(uuid.uuid4()),
                         student_id=student_id,
+                        school_id=school_id,
                         type=notif_type or "desconocido",
                         message=notif_message or f"Falló procesamiento del evento {event_type}",
                         status=NotificationStatusEnum.FALLIDA,

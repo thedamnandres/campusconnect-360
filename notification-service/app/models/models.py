@@ -18,6 +18,7 @@ class Notification(Base):
 
     id             = Column(String, primary_key=True, default=gen_uuid)
     student_id     = Column(String, nullable=True, index=True)
+    school_id      = Column(String, nullable=True, index=True)
     type           = Column(String(50), nullable=False)
     message        = Column(Text, nullable=False)
     status         = Column(Enum(NotificationStatusEnum), default=NotificationStatusEnum.ENVIADA, nullable=False)

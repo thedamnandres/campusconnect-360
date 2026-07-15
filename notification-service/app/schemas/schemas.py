@@ -6,6 +6,7 @@ from app.models.models import NotificationStatusEnum
 class NotificationResponse(BaseModel):
     id: str
     student_id: Optional[str] = None
+    school_id: Optional[str] = None
     type: str
     message: str
     status: NotificationStatusEnum
