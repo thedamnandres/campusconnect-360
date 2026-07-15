@@ -17,3 +17,14 @@ def decode_token(token: str) -> dict:
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
     return decode_token(credentials.credentials)
+
+
+def require_role(*roles: str):
+    def checker(user: dict = Depends(get_current_user)):
+        if user.get("role") not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Se requiere rol: {', '.join(roles)}",
+            )
+        return user
+    return checker

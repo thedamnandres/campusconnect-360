@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import uuid
 from datetime import datetime
@@ -8,6 +7,7 @@ import aio_pika
 from app.config import settings
 from app.database import SessionLocal
 from app.models.models import Notification, ProcessedEvent, NotificationStatusEnum
+from app.events.resilience import decode_and_validate_event, retry_or_dead_letter
 
 logger = logging.getLogger(__name__)
 
@@ -32,23 +32,31 @@ def get_event_notification_details(event_type: str, payload: dict):
         return "incidente", "Alerta de incidente al representante"
     return None, None
 
-async def process_message(message: aio_pika.IncomingMessage, exchange: aio_pika.Exchange, dlx_exchange: aio_pika.Exchange):
-    async with message.process(ignore_processed=True):
-        body = message.body.decode()
+async def process_message(
+    message: aio_pika.IncomingMessage,
+    channel: aio_pika.Channel,
+    dlx_exchange: aio_pika.Exchange,
+):
+    async with message.process(requeue=True, ignore_processed=True):
         try:
-            data = json.loads(body)
+            data = decode_and_validate_event(message.body)
         except Exception as parse_err:
-            logger.error(f"[CONSUMER] Error al procesar JSON del mensaje: {parse_err}")
+            logger.error(f"[CONSUMER] Evento inválido: {parse_err}")
+            await retry_or_dead_letter(
+                channel,
+                dlx_exchange,
+                message,
+                MAIN_QUEUE_NAME,
+                parse_err,
+                terminal=True,
+            )
             return
 
-        event_id = data.get("eventId") or message.message_id or str(uuid.uuid4())
+        event_id = data["eventId"]
         event_type = data.get("eventType", "Unknown")
         correlation_id = data.get("correlationId", "")
         student_id = data.get("studentId") or data.get("student_id")
         school_id = data.get("schoolId") or data.get("school_id")
-
-        headers = dict(message.headers or {})
-        retry_count = headers.get("x-retry-count", 0)
 
         db = SessionLocal()
         try:
@@ -79,26 +87,16 @@ async def process_message(message: aio_pika.IncomingMessage, exchange: aio_pika.
             db.add(processed)
             db.commit()
 
-        except Exception as e:
+        except Exception as exc:
             db.rollback()
-            retry_count += 1
-            logger.error(f"[CONSUMER ERROR] Fallo al procesar evento {event_id} (Intento {retry_count}/3): {e}")
+            logger.error(f"[CONSUMER ERROR] Fallo al procesar evento {event_id}: {exc}")
+            action = await retry_or_dead_letter(
+                channel, dlx_exchange, message, MAIN_QUEUE_NAME, exc
+            )
 
-            if retry_count < 3:
-                # Reintentar re-publicando con header incrementado
-                new_headers = {**headers, "x-retry-count": retry_count}
-                retry_msg = aio_pika.Message(
-                    body=message.body,
-                    content_type=message.content_type or "application/json",
-                    delivery_mode=message.delivery_mode or aio_pika.DeliveryMode.PERSISTENT,
-                    message_id=message.message_id,
-                    headers=new_headers
-                )
-                routing_key = message.routing_key or f"campusconnect.{event_type.lower()}"
-                await exchange.publish(retry_msg, routing_key=routing_key)
-            else:
-                # Falló 3 veces -> Registrar como fallida en BD y enviar a DLQ
-                logger.error(f"[CONSUMER DLQ] Evento {event_id} alcanzó el límite de 3 fallos. Redirigiendo a DLQ ({DLQ_QUEUE_NAME}).")
+            if action == "dead_lettered":
+                # Este registro es evidencia funcional. Si la propia base está
+                # caída, la copia durable del mensaje permanece en RabbitMQ.
                 try:
                     notif_type, notif_message = get_event_notification_details(event_type, data)
                     failed_notif = Notification(
@@ -113,20 +111,10 @@ async def process_message(message: aio_pika.IncomingMessage, exchange: aio_pika.
                         created_at=datetime.utcnow()
                     )
                     db.add(failed_notif)
-                    db.add(ProcessedEvent(event_id=event_id, event_type=event_type))
                     db.commit()
                 except Exception as db_err:
                     logger.error(f"[CONSUMER DLQ DB ERROR] Error registrando notificación fallida en BD: {db_err}")
                     db.rollback()
-
-                dlq_msg = aio_pika.Message(
-                    body=message.body,
-                    content_type=message.content_type or "application/json",
-                    delivery_mode=message.delivery_mode or aio_pika.DeliveryMode.PERSISTENT,
-                    message_id=message.message_id,
-                    headers={**headers, "x-retry-count": retry_count, "x-failure-reason": str(e)}
-                )
-                await dlx_exchange.publish(dlq_msg, routing_key="q.notification.dlq")
         finally:
             db.close()
 
@@ -171,7 +159,7 @@ async def start_consumer():
 
                 async with queue.iterator() as queue_iter:
                     async for message in queue_iter:
-                        await process_message(message, exchange, dlx_exchange)
+                        await process_message(message, channel, dlx_exchange)
 
         except asyncio.CancelledError:
             logger.info("[CONSUMER] Tarea de consumidor cancelada.")

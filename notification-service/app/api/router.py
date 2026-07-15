@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.auth import get_current_user
+from app.auth import get_current_user, require_role
 from app.models.models import Notification, NotificationStatusEnum
 from app.schemas.schemas import NotificationResponse
+from app.events.dlq import get_dlq_status, replay_dlq
 
 router = APIRouter()
 
@@ -52,6 +53,21 @@ def retry_notification(
     db.commit()
     db.refresh(notification)
     return notification
+
+
+@router.get("/dlq/status", tags=["Resiliencia"])
+async def dlq_status(
+    _: dict = Depends(require_role("director", "admin")),
+):
+    return await get_dlq_status()
+
+
+@router.post("/dlq/replay", tags=["Resiliencia"])
+async def dlq_replay(
+    limit: int = 100,
+    _: dict = Depends(require_role("director", "admin")),
+):
+    return await replay_dlq(limit)
 
 @router.get("/health", tags=["Health"])
 def health():
