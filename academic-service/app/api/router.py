@@ -10,6 +10,8 @@ from app.schemas.schemas import (
 )
 from app.services.academic_service import academic_service
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
+from app.health import health_snapshot
 
 router = APIRouter()
 
@@ -36,6 +38,14 @@ def list_students(
     if q:
         return academic_service.search_students(db, q)
     return academic_service.list_students(db, skip, limit)
+
+
+@router.get("/students/enrolled", response_model=List[StudentResponse], tags=["Estudiantes"])
+def list_enrolled_students(
+    db: Session = Depends(get_db),
+    _: dict = Depends(require_role("finance", "admin")),
+):
+    return academic_service.list_enrolled_students(db)
 
 @router.get("/students/{student_id}", response_model=StudentWithEnrollments, tags=["Estudiantes"])
 def get_student(
@@ -83,5 +93,6 @@ def get_student_enrollments(
 # HEALTH CHECK
 
 @router.get("/health", tags=["Health"])
-def health():
-    return {"status": "ok", "service": "academic-service"}
+async def health():
+    snapshot = await health_snapshot()
+    return JSONResponse(status_code=200 if snapshot["status"] == "ok" else 503, content=snapshot)

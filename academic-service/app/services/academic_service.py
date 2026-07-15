@@ -16,6 +16,9 @@ class AcademicService:
     def search_students(self, db: Session, q: str) -> List[Student]:
         return student_repo.search(db, q)
 
+    def list_enrolled_students(self, db: Session) -> List[Student]:
+        return student_repo.get_enrolled(db)
+
     def get_student(self, db: Session, student_id: str) -> Student:
         student = student_repo.get_by_id(db, student_id)
         if not student:

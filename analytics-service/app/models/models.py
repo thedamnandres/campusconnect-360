@@ -25,3 +25,18 @@ class ProcessedEvent(Base):
     event_id     = Column(String, primary_key=True)
     event_type   = Column(String)
     processed_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EventTrace(Base):
+    """Vista consultable de trazabilidad para la demostración y soporte."""
+
+    __tablename__ = "event_traces"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    event_id       = Column(String, unique=True, nullable=False, index=True)
+    correlation_id = Column(String, nullable=False, index=True)
+    event_type     = Column(String, nullable=False, index=True)
+    student_id     = Column(String, nullable=True, index=True)
+    school_id      = Column(String, nullable=True, index=True)
+    status         = Column(String, nullable=False, default="processed")
+    processed_at   = Column(DateTime, default=datetime.utcnow, nullable=False)

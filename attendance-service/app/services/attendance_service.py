@@ -1,12 +1,11 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from typing import List
-import httpx
 from app.repositories.attendance_repository import attendance_repo, incident_repo
 from app.schemas.schemas import AttendanceCreate, IncidentCreate
 from app.models.models import Attendance, Incident
 from app.events.publisher import enqueue_event
-from app.config import settings
+from app.services.academic_client import academic_client, AcademicServiceUnavailable
 
 class AttendanceService:
 
@@ -14,19 +13,8 @@ class AttendanceService:
 
     async def list_students(self, token: str) -> list:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(
-                    f"{settings.ACADEMIC_SERVICE_URL}/students",
-                    headers={"Authorization": f"Bearer {token}"}
-                )
-                response.raise_for_status()
-                return response.json()
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail="Error consultando estudiantes al academic-service"
-            )
-        except httpx.RequestError:
+            return await academic_client.list_students(token)
+        except AcademicServiceUnavailable:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="academic-service no disponible"
@@ -34,7 +22,18 @@ class AttendanceService:
 
     # ASISTENCIA
 
-    async def register_attendance(self, db: Session, data: AttendanceCreate) -> Attendance:
+    async def register_attendance(self, db: Session, data: AttendanceCreate, token: str) -> Attendance:
+        try:
+            student = await academic_client.get_student(data.student_id, token)
+        except AcademicServiceUnavailable:
+            raise HTTPException(status_code=503, detail="academic-service no disponible")
+        if not student:
+            raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+        data = data.model_copy(update={
+            "student_name": f"{student['first_name']} {student['last_name']}",
+            "school_id": student["school_id"],
+        })
         existing = attendance_repo.get_by_student_and_date(db, data.student_id, data.date)
         if existing:
             raise HTTPException(
@@ -69,7 +68,18 @@ class AttendanceService:
 
     # INCIDENTES
 
-    async def report_incident(self, db: Session, data: IncidentCreate) -> Incident:
+    async def report_incident(self, db: Session, data: IncidentCreate, token: str) -> Incident:
+        try:
+            student = await academic_client.get_student(data.student_id, token)
+        except AcademicServiceUnavailable:
+            raise HTTPException(status_code=503, detail="academic-service no disponible")
+        if not student:
+            raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+        data = data.model_copy(update={
+            "student_name": f"{student['first_name']} {student['last_name']}",
+            "school_id": student["school_id"],
+        })
         try:
             incident = incident_repo.create(db, data)
             enqueue_event(

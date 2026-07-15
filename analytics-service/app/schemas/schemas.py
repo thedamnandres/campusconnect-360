@@ -26,3 +26,16 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class EventTraceResponse(BaseModel):
+    event_id: str
+    correlation_id: str
+    event_type: str
+    student_id: Optional[str] = None
+    school_id: Optional[str] = None
+    status: str
+    processed_at: datetime
+
+    class Config:
+        from_attributes = True

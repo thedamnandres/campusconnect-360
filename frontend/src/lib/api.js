@@ -35,6 +35,7 @@ api.interceptors.response.use(
 export const academicApi = {
   login: (credentials) => api.post('/api/academic/auth/login', credentials),
   listStudents: (q = '') => api.get(q ? `/api/academic/students?q=${encodeURIComponent(q)}` : '/api/academic/students'),
+  listEnrolledStudents: () => api.get('/api/academic/students/enrolled'),
   getStudent: (id) => api.get(`/api/academic/students/${id}`),
   createStudent: (payload) => api.post('/api/academic/students', payload),
   enrollStudent: (payload) => api.post('/api/academic/enrollments', payload),
@@ -61,11 +62,16 @@ export const notificationApi = {
   listStudentNotifications: (studentId) => api.get(`/api/notifications/notifications/student/${studentId}`),
   listFailed: () => api.get('/api/notifications/notifications/failed'),
   retry: (id) => api.post(`/api/notifications/notifications/${id}/retry`),
+  dlqStatus: () => api.get('/api/notifications/dlq/status'),
+  replayDlq: (limit = 100) => api.post(`/api/notifications/dlq/replay?limit=${limit}`),
 }
 
 export const analyticsApi = {
   dashboard: (schoolId = '') => api.get(
     schoolId ? `/api/analytics/dashboard?school_id=${encodeURIComponent(schoolId)}` : '/api/analytics/dashboard',
+  ),
+  recentEvents: (schoolId = '', limit = 20) => api.get(
+    `/api/analytics/events?limit=${limit}${schoolId ? `&school_id=${encodeURIComponent(schoolId)}` : ''}`,
   ),
 }
 

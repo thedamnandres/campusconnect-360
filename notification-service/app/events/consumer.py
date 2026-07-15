@@ -8,6 +8,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models.models import Notification, ProcessedEvent, NotificationStatusEnum
 from app.events.resilience import decode_and_validate_event, retry_or_dead_letter
+from app.events.publisher import enqueue_event
 
 logger = logging.getLogger(__name__)
 
@@ -68,18 +69,39 @@ async def process_message(
 
             notif_type, notif_message = get_event_notification_details(event_type, data)
             if notif_type and notif_message:
-                notification = Notification(
-                    id=str(uuid.uuid4()),
-                    student_id=student_id,
-                    school_id=school_id,
-                    type=notif_type,
-                    message=notif_message,
-                    status=NotificationStatusEnum.ENVIADA,
-                    trigger_event=event_type,
+                notification = db.query(Notification).filter(
+                    Notification.correlation_id == correlation_id,
+                    Notification.trigger_event == event_type,
+                    Notification.status == NotificationStatusEnum.FALLIDA,
+                ).first()
+                if notification:
+                    notification.status = NotificationStatusEnum.ENVIADA
+                    notification.message = notif_message
+                else:
+                    notification = Notification(
+                        id=str(uuid.uuid4()),
+                        student_id=student_id,
+                        school_id=school_id,
+                        type=notif_type,
+                        message=notif_message,
+                        status=NotificationStatusEnum.ENVIADA,
+                        trigger_event=event_type,
+                        correlation_id=correlation_id,
+                        created_at=datetime.utcnow()
+                    )
+                    db.add(notification)
+                enqueue_event(
+                    db,
+                    "NotificationSent",
+                    {
+                        "notificationId": notification.id,
+                        "studentId": student_id,
+                        "schoolId": school_id,
+                        "triggerEvent": event_type,
+                    },
+                    deduplication_key=f"NotificationSent:{event_id}",
                     correlation_id=correlation_id,
-                    created_at=datetime.utcnow()
                 )
-                db.add(notification)
                 logger.info(f"[CONSUMER] Notificación '{notif_type}' generada para evento {event_type} (Estudiante: {student_id})")
 
             # Registrar evento procesado
@@ -111,6 +133,19 @@ async def process_message(
                         created_at=datetime.utcnow()
                     )
                     db.add(failed_notif)
+                    enqueue_event(
+                        db,
+                        "NotificationFailed",
+                        {
+                            "notificationId": failed_notif.id,
+                            "studentId": student_id,
+                            "schoolId": school_id,
+                            "triggerEvent": event_type,
+                            "failureReason": str(exc)[:500],
+                        },
+                        deduplication_key=f"NotificationFailed:{event_id}",
+                        correlation_id=correlation_id,
+                    )
                     db.commit()
                 except Exception as db_err:
                     logger.error(f"[CONSUMER DLQ DB ERROR] Error registrando notificación fallida en BD: {db_err}")

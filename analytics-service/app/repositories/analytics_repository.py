@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
-from app.models.models import DashboardCounters, ProcessedEvent
+from app.models.models import DashboardCounters, ProcessedEvent, EventTrace
 
 class AnalyticsRepository:
 
@@ -31,6 +31,10 @@ class AnalyticsRepository:
                 counters.total_absences += 1
         elif event_type == "IncidentReported":
             counters.total_incidents += 1
+        elif event_type == "NotificationSent":
+            counters.total_notifications_sent += 1
+        elif event_type == "NotificationFailed":
+            counters.total_notifications_failed += 1
 
         counters.total_events_processed += 1
         counters.last_updated = datetime.utcnow()
@@ -48,7 +52,29 @@ class AnalyticsRepository:
             self._increment(counters, event_type, payload)
 
         db.add(ProcessedEvent(event_id=event_id, event_type=event_type))
+        db.add(EventTrace(
+            event_id=event_id,
+            correlation_id=payload.get("correlationId", "unknown"),
+            event_type=event_type,
+            student_id=payload.get("studentId") or payload.get("student_id"),
+            school_id=payload.get("schoolId") or payload.get("school_id"),
+            status="processed",
+        ))
         db.commit()
+
+    def list_event_traces(
+        self,
+        db: Session,
+        limit: int = 20,
+        school_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> list[EventTrace]:
+        query = db.query(EventTrace)
+        if school_id:
+            query = query.filter(EventTrace.school_id == school_id)
+        if correlation_id:
+            query = query.filter(EventTrace.correlation_id == correlation_id)
+        return query.order_by(EventTrace.processed_at.desc()).limit(min(max(limit, 1), 100)).all()
 
     def update_external_counters(
         self, db: Session,

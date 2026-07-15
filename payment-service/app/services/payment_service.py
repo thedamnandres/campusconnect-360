@@ -43,8 +43,20 @@ class PaymentService:
                 detail=f"Estudiante {data.student_id} no encontrado en academic-service"
             )
 
+        active_enrollment = next(
+            (item for item in student.get("enrollments", []) if item.get("status") == "activa"),
+            None,
+        )
+        if not active_enrollment:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="El estudiante debe tener una matrícula activa antes de registrar obligaciones",
+            )
+
         student_name = f"{student['first_name']} {student['last_name']}"
-        school_id = data.school_id or student.get("school_id", "SCH-001")
+        # La institución siempre proviene del servicio académico; no se confía
+        # en un valor enviado por el cliente.
+        school_id = student["school_id"]
 
         payment = payment_repo.create(
             db,
