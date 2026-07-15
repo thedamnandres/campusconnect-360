@@ -7,6 +7,8 @@ import {
   PaymentIcon,
   StudentsIcon,
 } from './Icons'
+import { getSession, clearSession } from '../lib/session'
+import { canAccess } from '../lib/access'
 
 const NAV_ITEMS = [
   { label: 'Directivo', path: '/dashboard', icon: DashboardIcon },
@@ -50,14 +52,14 @@ function NavItem({ item }) {
 export default function AppLayout({ children }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const username = localStorage.getItem('username') || 'demo'
+  const session = getSession()
+  const username = session?.username || 'demo'
   const team = getTeam(location.pathname)
   const initials = username.slice(0, 2).toUpperCase()
+  const visibleNavItems = NAV_ITEMS.filter((item) => canAccess(session?.role, item.path))
 
   const handleLogout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('username')
-    localStorage.removeItem('role')
+    clearSession()
     navigate('/login')
   }
 
@@ -74,7 +76,7 @@ export default function AppLayout({ children }) {
           </div>
 
           <nav className="cc-nav-main" aria-label="Navegación principal">
-            {NAV_ITEMS.map((item) => <NavItem item={item} key={item.path} />)}
+            {visibleNavItems.map((item) => <NavItem item={item} key={item.path} />)}
           </nav>
 
           <div className="cc-sidebar-footer">

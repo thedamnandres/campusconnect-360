@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { clearSession } from './session'
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:80'
 
@@ -23,9 +24,7 @@ api.interceptors.response.use(
       || detail === 'Token inválido o expirado'
 
     if (authExpired && window.location.pathname !== '/login') {
-      localStorage.removeItem('token')
-      localStorage.removeItem('username')
-      localStorage.removeItem('role')
+      clearSession()
       window.location.assign('/login')
     }
 
