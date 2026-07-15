@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional, List
-from app.models.models import Student, Enrollment
+from app.models.models import Student, Enrollment, EnrollmentStatusEnum
 from app.schemas.schemas import StudentCreate, StudentUpdate, EnrollmentCreate
 
 class StudentRepository:
@@ -28,6 +28,12 @@ class StudentRepository:
                 Student.email.ilike(term),
             )
         ).all()
+
+    def get_enrolled(self, db: Session) -> List[Student]:
+        return db.query(Student).join(Enrollment).filter(
+            Student.is_active == True,
+            Enrollment.status == EnrollmentStatusEnum.ACTIVA,
+        ).distinct().all()
 
     def create(self, db: Session, data: StudentCreate) -> Student:
         student = Student(**data.model_dump())
@@ -58,8 +64,7 @@ class EnrollmentRepository:
     def create(self, db: Session, data: EnrollmentCreate, school_id: str) -> Enrollment:
         enrollment = Enrollment(**data.model_dump(), school_id=school_id)
         db.add(enrollment)
-        db.commit()
-        db.refresh(enrollment)
+        db.flush()
         return enrollment
 
 student_repo = StudentRepository()

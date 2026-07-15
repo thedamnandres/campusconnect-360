@@ -19,8 +19,7 @@ class AttendanceRepository:
     def create(self, db: Session, data: AttendanceCreate) -> Attendance:
         attendance = Attendance(**data.model_dump())
         db.add(attendance)
-        db.commit()
-        db.refresh(attendance)
+        db.flush()
         return attendance
 
 class IncidentRepository:
@@ -33,8 +32,7 @@ class IncidentRepository:
     def create(self, db: Session, data: IncidentCreate) -> Incident:
         incident = Incident(**data.model_dump())
         db.add(incident)
-        db.commit()
-        db.refresh(incident)
+        db.flush()
         return incident
 
 attendance_repo = AttendanceRepository()

@@ -3,11 +3,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import router
 from app.database import engine
 from app.models.models import Base
+from app.events.publisher import start_outbox_publisher
 import logging
+import asyncio
+from contextlib import asynccontextmanager
 
 logging.basicConfig(level=logging.INFO)
 
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    outbox_task = asyncio.create_task(start_outbox_publisher())
+    yield
+    outbox_task.cancel()
+    await asyncio.gather(outbox_task, return_exceptions=True)
 
 app = FastAPI(
     title="CampusConnect 360 — Attendance Service",
@@ -15,6 +24,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

@@ -22,7 +22,7 @@ export default function PaymentForm() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    academicApi.listStudents()
+    academicApi.listEnrolledStudents()
       .then(({ data }) => {
         setStudents(data)
         setForm((current) => ({ ...current, student_id: current.student_id || data[0]?.id || '' }))

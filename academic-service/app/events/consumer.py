@@ -1,29 +1,37 @@
 import asyncio
-import json
 import logging
-import uuid
 
 import aio_pika
 
 from app.config import settings
 from app.database import SessionLocal
 from app.models.models import FinancialStatusEnum, ProcessedEvent, Student
+from app.events.resilience import decode_and_validate_event, retry_or_dead_letter
 
 logger = logging.getLogger(__name__)
 
 EXCHANGE_NAME = "campusconnect.events"
 QUEUE_NAME = "q.academic.payments"
+DLX_EXCHANGE_NAME = "campusconnect.dlx"
+DLQ_QUEUE_NAME = f"{QUEUE_NAME}.dlq"
 
 
-async def process_message(message: aio_pika.IncomingMessage):
-    async with message.process(ignore_processed=True):
+async def process_message(
+    message: aio_pika.IncomingMessage,
+    channel: aio_pika.Channel,
+    dlx_exchange: aio_pika.Exchange,
+):
+    async with message.process(requeue=True, ignore_processed=True):
         try:
-            data = json.loads(message.body.decode())
+            data = decode_and_validate_event(message.body)
         except Exception as parse_err:
             logger.error(f"[ACADEMIC CONSUMER] Mensaje inválido: {parse_err}")
+            await retry_or_dead_letter(
+                channel, dlx_exchange, message, QUEUE_NAME, parse_err, terminal=True
+            )
             return
 
-        event_id = data.get("eventId") or message.message_id or str(uuid.uuid4())
+        event_id = data["eventId"]
         event_type = data.get("eventType", "Unknown")
 
         if event_type != "PaymentConfirmed":
@@ -51,7 +59,9 @@ async def process_message(message: aio_pika.IncomingMessage):
         except Exception as exc:
             db.rollback()
             logger.error(f"[ACADEMIC CONSUMER ERROR] No se pudo procesar {event_id}: {exc}")
-            raise
+            await retry_or_dead_letter(
+                channel, dlx_exchange, message, QUEUE_NAME, exc
+            )
         finally:
             db.close()
 
@@ -69,13 +79,23 @@ async def start_consumer():
                     aio_pika.ExchangeType.TOPIC,
                     durable=True,
                 )
+                dlx_exchange = await channel.declare_exchange(
+                    DLX_EXCHANGE_NAME,
+                    aio_pika.ExchangeType.DIRECT,
+                    durable=True,
+                )
+                dlq_queue = await channel.declare_queue(DLQ_QUEUE_NAME, durable=True)
+                await dlq_queue.bind(dlx_exchange, routing_key=DLQ_QUEUE_NAME)
+                # La aplicación enruta explícitamente los fallos a la DLQ. Se
+                # conserva la declaración original para ser compatible con
+                # volúmenes RabbitMQ creados por versiones anteriores.
                 queue = await channel.declare_queue(QUEUE_NAME, durable=True)
                 await queue.bind(exchange, routing_key="campusconnect.paymentconfirmed")
                 logger.info(f"[ACADEMIC CONSUMER] Escuchando PaymentConfirmed en {QUEUE_NAME}.")
 
                 async with queue.iterator() as queue_iter:
                     async for message in queue_iter:
-                        await process_message(message)
+                        await process_message(message, channel, dlx_exchange)
         except asyncio.CancelledError:
             logger.info("[ACADEMIC CONSUMER] Tarea cancelada.")
             break

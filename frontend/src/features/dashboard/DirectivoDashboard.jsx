@@ -37,17 +37,23 @@ export default function DirectivoDashboard() {
   const [schoolId, setSchoolId] = useState('')
   const [dashboard, setDashboard] = useState(DEFAULT_DASHBOARD)
   const [failedNotifications, setFailedNotifications] = useState([])
+  const [dlq, setDlq] = useState({ messages: 0, queue: 'q.notification.dlq' })
+  const [eventTraces, setEventTraces] = useState([])
   const [health, setHealth] = useState([])
   const [loading, setLoading] = useState(true)
+  const [replaying, setReplaying] = useState(false)
+  const [resilienceMessage, setResilienceMessage] = useState('')
   const [error, setError] = useState('')
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [dashboardRes, failedRes, healthResults] = await Promise.all([
+      const [dashboardRes, failedRes, dlqRes, tracesRes, healthResults] = await Promise.all([
         analyticsApi.dashboard(schoolId),
         notificationApi.listFailed().catch(() => ({ data: [] })),
+        notificationApi.dlqStatus().catch(() => ({ data: { messages: 0, queue: 'q.notification.dlq' } })),
+        analyticsApi.recentEvents(schoolId).catch(() => ({ data: [] })),
         Promise.allSettled([
           healthApi.academic(),
           healthApi.payment(),
@@ -59,10 +65,14 @@ export default function DirectivoDashboard() {
 
       setDashboard({ ...DEFAULT_DASHBOARD, ...dashboardRes.data })
       setFailedNotifications(schoolId ? failedRes.data.filter((n) => n.school_id === schoolId) : failedRes.data)
+      setDlq(dlqRes.data)
+      setEventTraces(tracesRes.data)
       setHealth(
         ['academic', 'payment', 'notification', 'attendance', 'analytics'].map((service, index) => ({
           service,
-          status: healthResults[index].status === 'fulfilled' ? 'OK' : 'Degradado',
+          status: healthResults[index].status === 'fulfilled' && healthResults[index].value.data.status === 'ok' ? 'OK' : 'Degradado',
+          dependencies: healthResults[index].status === 'fulfilled' ? healthResults[index].value.data.dependencies : null,
+          outboxPending: healthResults[index].status === 'fulfilled' ? healthResults[index].value.data.outbox_pending : null,
         })),
       )
     } catch (err) {
@@ -96,7 +106,25 @@ export default function DirectivoDashboard() {
   ]), [dashboard])
 
   const maxEvents = Math.max(...eventRows.map((row) => row.count), 1)
-  const ecosystemOk = health.every((item) => item.status === 'OK') && failedNotifications.length === 0
+  const ecosystemOk = health.length > 0
+    && health.every((item) => item.status === 'OK')
+    && failedNotifications.length === 0
+    && Number(dlq.messages || 0) === 0
+
+  const handleReplayDlq = async () => {
+    setReplaying(true)
+    setError('')
+    setResilienceMessage('')
+    try {
+      const { data } = await notificationApi.replayDlq()
+      setResilienceMessage(`Reprocesamiento solicitado: ${data.replayed} evento(s). La idempotencia evita duplicados.`)
+      await loadDashboard()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'No se pudo reprocesar la DLQ')
+    } finally {
+      setReplaying(false)
+    }
+  }
 
   return (
     <>
@@ -122,6 +150,7 @@ export default function DirectivoDashboard() {
       </div>
 
       {error && <div className="cc-message error" style={{ marginBottom: 18 }}>{error}</div>}
+      {resilienceMessage && <div className="cc-message success" style={{ marginBottom: 18 }}>{resilienceMessage}</div>}
 
       <section className="cc-grid cc-metrics">
         <MetricCard icon="students" label="Estudiantes matriculados" value={dashboard.total_students} />
@@ -194,6 +223,12 @@ export default function DirectivoDashboard() {
                   <span className={`cc-chip ${item.status === 'OK' ? 'green' : 'red'}`} style={{ float: 'right' }}>
                     {item.status === 'OK' ? 'Operativo' : 'Degradado'}
                   </span>
+                  {item.dependencies && (
+                    <small style={{ display: 'block', marginTop: 10, color: 'var(--cc-muted)' }}>
+                      DB: {item.dependencies.database} · RabbitMQ: {item.dependencies.rabbitmq}
+                      {item.outboxPending !== null && item.outboxPending !== undefined ? ` · Outbox: ${item.outboxPending}` : ''}
+                    </small>
+                  )}
                 </div>
               ))}
             </div>
@@ -255,6 +290,55 @@ export default function DirectivoDashboard() {
               </tr>
             </tbody>
           </table>
+        </article>
+      </section>
+
+      <section className="cc-grid cc-dashboard-workspace" style={{ marginTop: 18 }}>
+        <article className="cc-card">
+          <div className="cc-card-header">
+            <div className="cc-card-title"><span className="cc-card-icon"><Icon name="alert" /></span>Resiliencia y Dead Letter Queue</div>
+            <span className={`cc-chip ${Number(dlq.messages || 0) === 0 ? 'green' : 'red'}`}>
+              {dlq.messages || 0} pendiente(s)
+            </span>
+          </div>
+          <p style={{ color: 'var(--cc-muted)', marginTop: 12 }}>
+            Cola: <strong>{dlq.queue || 'q.notification.dlq'}</strong>. Los eventos fallidos se conservan para un reprocesamiento seguro.
+          </p>
+          <button
+            type="button"
+            className="cc-button primary"
+            style={{ marginTop: 18 }}
+            disabled={replaying || Number(dlq.messages || 0) === 0}
+            onClick={handleReplayDlq}
+          >
+            {replaying ? 'Reprocesando...' : 'Reprocesar eventos de la DLQ'}
+          </button>
+        </article>
+
+        <article className="cc-card">
+          <div className="cc-card-header">
+            <div className="cc-card-title"><span className="cc-card-icon"><Icon name="activity" /></span>Trazabilidad reciente</div>
+            <span className="cc-chip green">{eventTraces.length} eventos</span>
+          </div>
+          {eventTraces.length === 0 ? (
+            <p className="cc-empty">Aún no hay eventos procesados para mostrar.</p>
+          ) : (
+            <div style={{ overflowX: 'auto', maxHeight: 300, overflowY: 'auto' }}>
+              <table className="cc-table">
+                <thead><tr><th>EVENTO</th><th>CORRELACIÓN</th><th>ESTADO</th><th>HORA</th></tr></thead>
+                <tbody>
+                  {eventTraces.map((trace) => (
+                    <tr key={trace.event_id}>
+                      <td><strong>{trace.event_type}</strong><small style={{ display: 'block' }}>{trace.event_id.slice(0, 8)}</small></td>
+                      <td><small>{trace.correlation_id}</small></td>
+                      <td><span className="cc-chip green">{trace.status}</span></td>
+                      <td>{new Date(trace.processed_at).toLocaleTimeString('es-EC')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </article>
       </section>
     </>

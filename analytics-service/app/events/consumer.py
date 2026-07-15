@@ -1,27 +1,31 @@
 import asyncio
-import json
 import logging
-import uuid
 import aio_pika
 
 from app.config import settings
 from app.database import SessionLocal
 from app.repositories.analytics_repository import analytics_repo
+from app.events.resilience import decode_and_validate_event, retry_or_dead_letter
 
 logger = logging.getLogger(__name__)
 
 EXCHANGE_NAME = "campusconnect.events"
 QUEUE_NAME = "q.analytics"
+DLX_EXCHANGE_NAME = "campusconnect.dlx"
+DLQ_QUEUE_NAME = f"{QUEUE_NAME}.dlq"
 
-async def process_message(message: aio_pika.IncomingMessage):
-    async with message.process(ignore_processed=True):
+async def process_message(message, channel, dlx_exchange):
+    async with message.process(requeue=True, ignore_processed=True):
         try:
-            data = json.loads(message.body.decode())
+            data = decode_and_validate_event(message.body)
         except Exception as parse_err:
             logger.error(f"[CONSUMER] Error al procesar JSON del mensaje: {parse_err}")
+            await retry_or_dead_letter(
+                channel, dlx_exchange, message, QUEUE_NAME, parse_err, terminal=True
+            )
             return
 
-        event_id = data.get("eventId") or message.message_id or str(uuid.uuid4())
+        event_id = data["eventId"]
         event_type = data.get("eventType", "Unknown")
 
         db = SessionLocal()
@@ -35,6 +39,7 @@ async def process_message(message: aio_pika.IncomingMessage):
         except Exception as e:
             db.rollback()
             logger.error(f"[CONSUMER ERROR] Fallo al procesar evento {event_id}: {e}")
+            await retry_or_dead_letter(channel, dlx_exchange, message, QUEUE_NAME, e)
         finally:
             db.close()
 
@@ -52,7 +57,13 @@ async def start_consumer():
                     aio_pika.ExchangeType.TOPIC,
                     durable=True
                 )
-
+                dlx_exchange = await channel.declare_exchange(
+                    DLX_EXCHANGE_NAME,
+                    aio_pika.ExchangeType.DIRECT,
+                    durable=True,
+                )
+                dlq_queue = await channel.declare_queue(DLQ_QUEUE_NAME, durable=True)
+                await dlq_queue.bind(dlx_exchange, routing_key=DLQ_QUEUE_NAME)
                 queue = await channel.declare_queue(QUEUE_NAME, durable=True)
                 await queue.bind(exchange, routing_key="#")
 
@@ -60,7 +71,7 @@ async def start_consumer():
 
                 async with queue.iterator() as queue_iter:
                     async for message in queue_iter:
-                        await process_message(message)
+                        await process_message(message, channel, dlx_exchange)
 
         except asyncio.CancelledError:
             logger.info("[CONSUMER] Tarea de consumidor cancelada.")

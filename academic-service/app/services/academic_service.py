@@ -4,7 +4,7 @@ from typing import List
 from app.repositories.student_repository import student_repo, enrollment_repo
 from app.schemas.schemas import StudentCreate, StudentUpdate, EnrollmentCreate
 from app.models.models import Student, Enrollment
-from app.events.publisher import publish_event
+from app.events.publisher import enqueue_event
 
 class AcademicService:
 
@@ -15,6 +15,9 @@ class AcademicService:
 
     def search_students(self, db: Session, q: str) -> List[Student]:
         return student_repo.search(db, q)
+
+    def list_enrolled_students(self, db: Session) -> List[Student]:
+        return student_repo.get_enrolled(db)
 
     def get_student(self, db: Session, student_id: str) -> Student:
         student = student_repo.get_by_id(db, student_id)
@@ -54,20 +57,29 @@ class AcademicService:
 
         # La matrícula siempre pertenece al colegio del estudiante: no se
         # vuelve a pedir en el formulario ni se acepta un valor distinto.
-        enrollment = enrollment_repo.create(db, data, school_id=student.school_id)
-
-        await publish_event("StudentEnrolled", {
-            "studentId":           student.id,
-            "schoolId":            enrollment.school_id,
-            "grade":               enrollment.grade,
-            "section":             enrollment.section,
-            "schoolYear":          enrollment.school_year,
-            "studentName":         f"{student.first_name} {student.last_name}",
-            "representativeEmail": student.representative_email,
-            "enrollmentId":        enrollment.id,
-        })
-
-        return enrollment
+        try:
+            enrollment = enrollment_repo.create(db, data, school_id=student.school_id)
+            enqueue_event(
+                db,
+                "StudentEnrolled",
+                {
+                    "studentId":           student.id,
+                    "schoolId":            enrollment.school_id,
+                    "grade":               enrollment.grade,
+                    "section":             enrollment.section,
+                    "schoolYear":          enrollment.school_year,
+                    "studentName":         f"{student.first_name} {student.last_name}",
+                    "representativeEmail": student.representative_email,
+                    "enrollmentId":        enrollment.id,
+                },
+                deduplication_key=f"StudentEnrolled:{enrollment.id}",
+            )
+            db.commit()
+            db.refresh(enrollment)
+            return enrollment
+        except Exception:
+            db.rollback()
+            raise
 
     def get_enrollments(self, db: Session, student_id: str) -> List[Enrollment]:
         self.get_student(db, student_id)

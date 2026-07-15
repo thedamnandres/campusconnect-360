@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.auth import get_current_user, require_role
+from app.auth import require_role
 from app.schemas.schemas import PaymentCreate, PaymentResponse
 from app.services.payment_service import payment_service
+from fastapi.responses import JSONResponse
+from app.health import health_snapshot
 
 router = APIRouter()
 
@@ -15,7 +17,7 @@ def list_payments(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_user)
+    _: dict = Depends(require_role("finance", "director", "admin"))
 ):
     return payment_service.list_payments(db, skip, limit)
 
@@ -24,7 +26,7 @@ def list_pending_payments(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_user)
+    _: dict = Depends(require_role("finance", "director", "admin"))
 ):
     return payment_service.list_pending(db, skip, limit)
 
@@ -32,7 +34,7 @@ def list_pending_payments(
 def get_student_payments(
     student_id: str,
     db: Session = Depends(get_db),
-    _: dict = Depends(get_current_user)
+    _: dict = Depends(require_role("academic", "finance", "director", "admin"))
 ):
     return payment_service.get_by_student(db, student_id)
 
@@ -56,5 +58,6 @@ async def confirm_payment(
 # HEALTH CHECK
 
 @router.get("/health", tags=["Health"])
-def health():
-    return {"status": "ok", "service": "payment-service"}
+async def health():
+    snapshot = await health_snapshot()
+    return JSONResponse(status_code=200 if snapshot["status"] == "ok" else 503, content=snapshot)
