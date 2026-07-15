@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { academicApi, attendanceApi, notificationApi, paymentApi } from '../../lib/api'
+import { getSchoolName } from '../../lib/schools'
 
 export default function StudentDetail() {
   const { id } = useParams()
@@ -101,7 +102,7 @@ export default function StudentDetail() {
             <InfoRow label="Correo electrónico" value={student.email} />
             <InfoRow label="Teléfono" value={student.phone || '—'} />
             <InfoRow label="Fecha de nacimiento" value={student.birth_date || '—'} />
-            <InfoRow label="Institución" value={student.school_id} />
+            <InfoRow label="Institución" value={getSchoolName(student.school_id)} />
           </div>
         </div>
 

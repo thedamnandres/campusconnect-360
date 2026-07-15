@@ -64,7 +64,9 @@ export const notificationApi = {
 }
 
 export const analyticsApi = {
-  dashboard: () => api.get('/api/analytics/dashboard'),
+  dashboard: (schoolId = '') => api.get(
+    schoolId ? `/api/analytics/dashboard?school_id=${encodeURIComponent(schoolId)}` : '/api/analytics/dashboard',
+  ),
 }
 
 export const healthApi = {

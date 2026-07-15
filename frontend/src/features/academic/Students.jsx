@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { academicApi } from '../../lib/api'
+import { getSchoolName } from '../../lib/schools'
 
 export default function Students() {
   const navigate = useNavigate()
@@ -85,7 +86,7 @@ export default function Students() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--gray-light)', borderBottom: '1px solid var(--gray-border)' }}>
-                  {['Cédula', 'Nombre', 'Correo electrónico', 'Estado financiero', 'Acciones'].map(h => (
+                  {['Cédula', 'Nombre', 'Correo electrónico', 'Colegio', 'Estado financiero', 'Acciones'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, fontSize: 13 }}>
                       {h}
                     </th>
@@ -108,6 +109,7 @@ export default function Students() {
                       {s.first_name} {s.last_name}
                     </td>
                     <td style={{ padding: '12px 16px', color: 'var(--gray)' }}>{s.email}</td>
+                    <td style={{ padding: '12px 16px' }}>{getSchoolName(s.school_id)}</td>
                     <td style={{ padding: '12px 16px' }}>{getStatusBadge(s.financial_status)}</td>
                     <td style={{ padding: '12px 16px' }}>
                       <button

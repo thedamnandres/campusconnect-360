@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../../components/Icons'
 import { analyticsApi, healthApi, notificationApi } from '../../lib/api'
+import { SCHOOLS } from '../../lib/schools'
 
 const SERVICE_LABELS = {
   academic: 'Académico',
@@ -33,6 +34,7 @@ function MetricCard({ icon, label, value, tone = 'green', chip = 'Actualizado' }
 }
 
 export default function DirectivoDashboard() {
+  const [schoolId, setSchoolId] = useState('')
   const [dashboard, setDashboard] = useState(DEFAULT_DASHBOARD)
   const [failedNotifications, setFailedNotifications] = useState([])
   const [health, setHealth] = useState([])
@@ -44,7 +46,7 @@ export default function DirectivoDashboard() {
     setError('')
     try {
       const [dashboardRes, failedRes, healthResults] = await Promise.all([
-        analyticsApi.dashboard(),
+        analyticsApi.dashboard(schoolId),
         notificationApi.listFailed().catch(() => ({ data: [] })),
         Promise.allSettled([
           healthApi.academic(),
@@ -56,7 +58,7 @@ export default function DirectivoDashboard() {
       ])
 
       setDashboard({ ...DEFAULT_DASHBOARD, ...dashboardRes.data })
-      setFailedNotifications(failedRes.data)
+      setFailedNotifications(schoolId ? failedRes.data.filter((n) => n.school_id === schoolId) : failedRes.data)
       setHealth(
         ['academic', 'payment', 'notification', 'attendance', 'analytics'].map((service, index) => ({
           service,
@@ -68,9 +70,9 @@ export default function DirectivoDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [schoolId])
 
-  // Carga inicial
+  // Carga inicial y cada vez que cambia el colegio seleccionado
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDashboard()
@@ -101,6 +103,17 @@ export default function DirectivoDashboard() {
       <div className="cc-content-title">
         <h1>Panel directivo</h1>
         <div className="cc-page-actions">
+          <select
+            value={schoolId}
+            onChange={(event) => setSchoolId(event.target.value)}
+            style={{ maxWidth: 220 }}
+            aria-label="Filtrar por colegio"
+          >
+            <option value="">Todos los colegios</option>
+            {SCHOOLS.map((school) => (
+              <option key={school.id} value={school.id}>{school.name}</option>
+            ))}
+          </select>
           <span className={`cc-chip ${ecosystemOk ? 'green' : 'red'}`}>
             {ecosystemOk ? 'Ecosistema operativo' : 'Revisar alertas'}
           </span>

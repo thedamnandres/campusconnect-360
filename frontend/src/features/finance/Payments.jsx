@@ -30,11 +30,10 @@ function statusChip(status) {
 export default function Payments() {
   const navigate = useNavigate()
   const [payments, setPayments] = useState([])
-  const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [confirming, setConfirming] = useState(false)
+  const [confirmingId, setConfirmingId] = useState(null)
 
   const loadPayments = useCallback(async () => {
     setLoading(true)
@@ -42,7 +41,6 @@ export default function Payments() {
     try {
       const { data } = await paymentApi.listPayments()
       setPayments(data)
-      setSelectedId((current) => current || data[0]?.id || null)
     } catch (err) {
       setError(err.response?.data?.detail || 'No se pudieron cargar los pagos')
     } finally {
@@ -54,8 +52,6 @@ export default function Payments() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPayments()
   }, [loadPayments])
-
-  const selected = payments.find((payment) => payment.id === selectedId) || payments[0]
 
   const metrics = useMemo(() => {
     const pending = payments.filter((payment) => payment.status === 'pendiente')
@@ -69,19 +65,25 @@ export default function Payments() {
     }
   }, [payments])
 
-  const confirmPayment = async () => {
-    if (!selected || selected.status !== 'pendiente') return
-    setConfirming(true)
+  const pendingPayments = useMemo(
+    () => payments.filter((payment) => payment.status === 'pendiente'),
+    [payments],
+  )
+
+  // Cada obligación pendiente se confirma de forma independiente: no hay
+  // "una obligación seleccionada", sino N acciones posibles a la vez.
+  const confirmPayment = async (paymentId) => {
+    setConfirmingId(paymentId)
     setError('')
     setMessage('')
     try {
-      await paymentApi.confirmPayment(selected.id)
+      await paymentApi.confirmPayment(paymentId)
       setMessage('Pago confirmado. Se publicó el evento de pago confirmado para académico, notificaciones y analítica.')
       await loadPayments()
     } catch (err) {
       setError(err.response?.data?.detail || 'No se pudo confirmar el pago')
     } finally {
-      setConfirming(false)
+      setConfirmingId(null)
     }
   }
 
@@ -94,7 +96,7 @@ export default function Payments() {
         <div className="cc-page-actions">
           <button type="button" className="cc-button secondary" onClick={loadPayments}>Actualizar</button>
           <button type="button" className="cc-button primary" onClick={() => navigate('/payments/new')}>
-            Nueva obligación
+            Nueva obligación de pago
           </button>
         </div>
       </div>
@@ -145,37 +147,34 @@ export default function Payments() {
 
         <aside className="cc-card">
           <div className="cc-card-header">
-            <div className="cc-card-title"><span className="cc-card-icon"><Icon name="payments" /></span>Obligación seleccionada</div>
-            {selected && statusChip(selected.status)}
+            <div className="cc-card-title"><span className="cc-card-icon"><Icon name="payments" /></span>Pagos pendientes por confirmar</div>
+            <span className="cc-chip red">{pendingPayments.length}</span>
           </div>
-          {selected ? (
-            <>
-              <h2 style={{ fontSize: 24, marginBottom: 8 }}>{selected.student_name}</h2>
-              <p style={{ color: 'var(--cc-muted)', fontSize: 12, lineHeight: 1.45 }}>
-                {selected.school_id} · {selected.concept}
-              </p>
-              <dl style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 16, marginTop: 28, fontSize: 13 }}>
-                <dt style={{ color: 'var(--cc-muted)' }}>Valor</dt>
-                <dd><strong>{money(selected.amount)}</strong></dd>
-                <dt style={{ color: 'var(--cc-muted)' }}>ID de pago</dt>
-                <dd>{selected.id}</dd>
-                <dt style={{ color: 'var(--cc-muted)' }}>Registrado</dt>
-                <dd>{new Date(selected.created_at).toLocaleString('es-EC')}</dd>
-                <dt style={{ color: 'var(--cc-muted)' }}>Evento</dt>
-                <dd><span className="cc-chip purple">Pago confirmado</span></dd>
-              </dl>
-              <button
-                type="button"
-                className="cc-button primary"
-                style={{ marginTop: 30 }}
-                disabled={selected.status !== 'pendiente' || confirming}
-                onClick={confirmPayment}
-              >
-                {confirming ? 'Confirmando...' : 'Confirmar pago'}
-              </button>
-            </>
+          {pendingPayments.length === 0 ? (
+            <p className="cc-empty">No hay pagos pendientes por confirmar.</p>
           ) : (
-            <p className="cc-empty">Registra una obligación para iniciar el flujo de pagos.</p>
+            <div style={{ display: 'grid', gap: 10, marginTop: 16, maxHeight: 360, overflowY: 'auto', paddingRight: 4 }}>
+              {pendingPayments.map((payment) => (
+                <div key={payment.id} className="cc-card" style={{ padding: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                    <div>
+                      <strong>{payment.student_name}</strong>
+                      <p style={{ color: 'var(--cc-muted)', fontSize: 12, marginTop: 2 }}>{payment.concept}</p>
+                    </div>
+                    <strong style={{ whiteSpace: 'nowrap' }}>{money(payment.amount)}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    className="cc-button primary"
+                    style={{ marginTop: 12, width: '100%' }}
+                    disabled={confirmingId === payment.id}
+                    onClick={() => confirmPayment(payment.id)}
+                  >
+                    {confirmingId === payment.id ? 'Confirmando...' : 'Confirmar pago'}
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </aside>
       </section>
@@ -198,7 +197,6 @@ export default function Payments() {
                 <th>AVANCE</th>
                 <th>VALOR</th>
                 <th>ESTADO</th>
-                <th>ACCIÓN</th>
               </tr>
             </thead>
             <tbody>
@@ -214,16 +212,14 @@ export default function Payments() {
                   </td>
                   <td>{money(payment.amount)}</td>
                   <td>{statusChip(payment.status)}</td>
-                  <td>
-                    <button type="button" className="cc-button secondary" onClick={() => setSelectedId(payment.id)}>
-                      Seleccionar
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
+        <p style={{ marginTop: 12, fontSize: 12, color: 'var(--cc-muted)' }}>
+          Para confirmar un pago, usa el panel «Pagos pendientes por confirmar» arriba.
+        </p>
       </section>
     </>
   )

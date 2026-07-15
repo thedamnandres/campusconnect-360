@@ -17,7 +17,15 @@ const NAV_ITEMS = [
   { label: 'Bienestar', path: '/wellbeing', icon: AttendanceIcon },
 ]
 
-function getTeam(pathname) {
+const ROLE_LABELS = {
+  academic: 'Secretaría académica',
+  finance: 'Finanzas',
+  teacher: 'Docente',
+  director: 'Dirección',
+  admin: 'Administrador',
+}
+
+function getSectionTeam(pathname) {
   if (pathname.startsWith('/payments')) return 'Finanzas'
   if (pathname.startsWith('/wellbeing')) return 'Docente'
   if (pathname.startsWith('/dashboard')) return 'Dirección'
@@ -54,7 +62,8 @@ export default function AppLayout({ children }) {
   const location = useLocation()
   const session = getSession()
   const username = session?.username || 'demo'
-  const team = getTeam(location.pathname)
+  const sectionTeam = getSectionTeam(location.pathname)
+  const roleLabel = ROLE_LABELS[session?.role] || 'Invitado'
   const initials = username.slice(0, 2).toUpperCase()
   const visibleNavItems = NAV_ITEMS.filter((item) => canAccess(session?.role, item.path))
 
@@ -81,7 +90,7 @@ export default function AppLayout({ children }) {
 
           <div className="cc-sidebar-footer">
             <span className="cc-role-label">Rol actual</span>
-            <strong>{team}</strong>
+            <strong>{roleLabel}</strong>
             <small>CampusConnect 360</small>
           </div>
         </aside>
@@ -89,7 +98,7 @@ export default function AppLayout({ children }) {
         <main className="cc-main">
           <header className="cc-topbar">
             <div className="cc-topbar-title">
-              <span>{team}</span>
+              <span>{sectionTeam}</span>
               <strong>{getSectionName(location.pathname)}</strong>
             </div>
 
@@ -97,7 +106,7 @@ export default function AppLayout({ children }) {
               <span className="cc-avatar">{initials}</span>
               <span>
                 <strong>{username}</strong>
-                <small>{team}</small>
+                <small>{roleLabel}</small>
               </span>
             </div>
             <button type="button" className="cc-logout" onClick={handleLogout}>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { academicApi } from '../../lib/api'
+import { SCHOOLS } from '../../lib/schools'
 
 // Definido FUERA del componente para que su referencia sea estable entre renders.
 // Si se define dentro, React remonta el input en cada tecla y se pierde el foco.
@@ -33,6 +34,7 @@ export default function StudentForm() {
     email: '',
     phone: '',
     birth_date: '',
+    school_id: '',
     representative_name: '',
     representative_email: '',
     representative_phone: '',
@@ -84,6 +86,20 @@ export default function StudentForm() {
               Datos personales
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ gridColumn: '1 / -1', marginBottom: 16 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>
+                  Colegio <span style={{ color: 'var(--red)' }}>*</span>
+                </label>
+                <select name="school_id" value={form.school_id} onChange={handleChange} required>
+                  <option value="">Seleccionar colegio...</option>
+                  {SCHOOLS.map((school) => (
+                    <option key={school.id} value={school.id}>{school.name}</option>
+                  ))}
+                </select>
+                <p style={{ fontSize: 12, color: 'var(--gray)', marginTop: 4 }}>
+                  El colegio se define al registrar al estudiante y aplicará automáticamente al resto de sus trámites (matrícula, pagos, asistencia).
+                </p>
+              </div>
               <Field
                 label="Cédula" name="cedula" required
                 value={form.cedula} onChange={handleChange}
@@ -104,6 +120,7 @@ export default function StudentForm() {
               <Field
                 label="Correo electrónico" name="email" type="email" required
                 value={form.email} onChange={handleChange}
+                placeholder="correo@dominio.com"
               />
               <Field
                 label="Teléfono" name="phone"
@@ -115,19 +132,24 @@ export default function StudentForm() {
 
           {/* Datos del representante */}
           <div className="card" style={{ marginBottom: 24 }}>
-            <h3 style={{ fontWeight: 600, marginBottom: 20, paddingBottom: 12, borderBottom: '1px solid var(--gray-border)' }}>
-              Representante
+            <h3 style={{ fontWeight: 600, marginBottom: 4, paddingBottom: 12, borderBottom: '1px solid var(--gray-border)' }}>
+              Representante <span style={{ fontWeight: 400, color: 'var(--gray)', fontSize: 13 }}>(opcional)</span>
             </h3>
+            <p style={{ color: 'var(--gray)', fontSize: 13, margin: '12px 0 20px' }}>
+              Se usará para enviar notificaciones sobre matrículas, pagos y novedades del estudiante.
+            </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div style={{ gridColumn: '1 / -1' }}>
                 <Field
                   label="Nombre completo" name="representative_name"
                   value={form.representative_name} onChange={handleChange}
+                  placeholder="Nombre del padre, madre o tutor"
                 />
               </div>
               <Field
                 label="Correo electrónico" name="representative_email" type="email"
                 value={form.representative_email} onChange={handleChange}
+                placeholder="correo@dominio.com"
               />
               <Field
                 label="Teléfono" name="representative_phone"
