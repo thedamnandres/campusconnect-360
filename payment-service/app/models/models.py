@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Float, DateTime, Enum
+from sqlalchemy import Column, String, Float, DateTime, Enum, Integer, JSON, Text
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
 import uuid
@@ -33,3 +33,18 @@ class ProcessedEvent(Base):
     event_id     = Column(String, primary_key=True)
     event_type   = Column(String(100))
     processed_at = Column(DateTime, default=datetime.utcnow)
+
+
+class OutboxEvent(Base):
+    __tablename__ = "outbox_events"
+
+    id                = Column(String, primary_key=True)
+    deduplication_key = Column(String(255), unique=True, nullable=False, index=True)
+    event_type        = Column(String(100), nullable=False)
+    event_data        = Column(JSON, nullable=False)
+    status            = Column(String(20), nullable=False, default="pending", index=True)
+    attempts          = Column(Integer, nullable=False, default=0)
+    last_error        = Column(Text, nullable=True)
+    next_attempt_at   = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at        = Column(DateTime, nullable=False, default=datetime.utcnow)
+    published_at      = Column(DateTime, nullable=True)

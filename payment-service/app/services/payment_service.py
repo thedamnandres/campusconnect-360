@@ -4,7 +4,7 @@ from typing import List
 from app.repositories.payment_repository import payment_repo
 from app.schemas.schemas import PaymentCreate
 from app.models.models import Payment, PaymentStatusEnum
-from app.events.publisher import publish_event
+from app.events.publisher import enqueue_event
 from app.services.academic_client import academic_client, AcademicServiceUnavailable
 
 class PaymentService:
@@ -46,7 +46,7 @@ class PaymentService:
         student_name = f"{student['first_name']} {student['last_name']}"
         school_id = data.school_id or student.get("school_id", "SCH-001")
 
-        return payment_repo.create(
+        payment = payment_repo.create(
             db,
             student_id=data.student_id,
             student_name=student_name,
@@ -54,23 +54,31 @@ class PaymentService:
             amount=data.amount,
             concept=data.concept,
         )
+        return payment
 
     async def create_payment_async(self, db: Session, data: PaymentCreate, authorization: str) -> Payment:
-        """Versión async que además publica el evento PaymentCreated."""
-        payment = self.create_payment(db, data, authorization)
+        """Guarda obligación y PaymentCreated de forma atómica."""
         try:
-            await publish_event("PaymentCreated", {
-                "paymentId":   payment.id,
-                "studentId":   payment.student_id,
-                "schoolId":    payment.school_id,
-                "amount":      float(payment.amount),
-                "concept":     payment.concept,
-                "studentName": payment.student_name,
-            })
+            payment = self.create_payment(db, data, authorization)
+            enqueue_event(
+                db,
+                "PaymentCreated",
+                {
+                    "paymentId":   payment.id,
+                    "studentId":   payment.student_id,
+                    "schoolId":    payment.school_id,
+                    "amount":      float(payment.amount),
+                    "concept":     payment.concept,
+                    "studentName": payment.student_name,
+                },
+                deduplication_key=f"PaymentCreated:{payment.id}",
+            )
+            db.commit()
+            db.refresh(payment)
+            return payment
         except Exception:
-            # No es crítico que falle el evento de creación
-            pass
-        return payment
+            db.rollback()
+            raise
 
     # CONFIRMACION DE PAGO
 
@@ -90,21 +98,25 @@ class PaymentService:
             )
 
         try:
-            await publish_event("PaymentConfirmed", {
-                "paymentId":   payment.id,
-                "studentId":   payment.student_id,
-                "schoolId":    payment.school_id,
-                "amount":      payment.amount,
-                "concept":     payment.concept,
-                "studentName": payment.student_name,
-            })
-        except Exception:
-            payment_repo.mark_failed(db, payment)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="No se pudo publicar el evento PaymentConfirmed; el pago quedó marcado como fallido"
+            payment_repo.mark_confirmed(db, payment)
+            enqueue_event(
+                db,
+                "PaymentConfirmed",
+                {
+                    "paymentId":   payment.id,
+                    "studentId":   payment.student_id,
+                    "schoolId":    payment.school_id,
+                    "amount":      payment.amount,
+                    "concept":     payment.concept,
+                    "studentName": payment.student_name,
+                },
+                deduplication_key=f"PaymentConfirmed:{payment.id}",
             )
-
-        return payment_repo.mark_confirmed(db, payment)
+            db.commit()
+            db.refresh(payment)
+            return payment
+        except Exception:
+            db.rollback()
+            raise
 
 payment_service = PaymentService()

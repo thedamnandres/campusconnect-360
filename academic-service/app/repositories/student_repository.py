@@ -58,8 +58,7 @@ class EnrollmentRepository:
     def create(self, db: Session, data: EnrollmentCreate, school_id: str) -> Enrollment:
         enrollment = Enrollment(**data.model_dump(), school_id=school_id)
         db.add(enrollment)
-        db.commit()
-        db.refresh(enrollment)
+        db.flush()
         return enrollment
 
 student_repo = StudentRepository()

@@ -6,6 +6,7 @@ from app.api.router import router
 from app.database import engine
 from app.models.models import Base
 from app.events.consumer import start_consumer
+from app.events.publisher import start_outbox_publisher
 from contextlib import asynccontextmanager
 import asyncio
 import logging
@@ -16,12 +17,11 @@ logging.basicConfig(level=logging.INFO)
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     consumer_task = asyncio.create_task(start_consumer())
+    outbox_task = asyncio.create_task(start_outbox_publisher())
     yield
-    consumer_task.cancel()
-    try:
-        await consumer_task
-    except asyncio.CancelledError:
-        pass
+    for task in (consumer_task, outbox_task):
+        task.cancel()
+    await asyncio.gather(consumer_task, outbox_task, return_exceptions=True)
 
 app = FastAPI(
     title="CampusConnect 360 — Academic Service",

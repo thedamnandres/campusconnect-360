@@ -27,15 +27,12 @@ class PaymentRepository:
             status=PaymentStatusEnum.PENDIENTE,
         )
         db.add(payment)
-        db.commit()
-        db.refresh(payment)
+        db.flush()
         return payment
 
     def mark_confirmed(self, db: Session, payment: Payment) -> Payment:
         payment.status = PaymentStatusEnum.CONFIRMADO
         payment.confirmed_at = datetime.utcnow()
-        db.commit()
-        db.refresh(payment)
         return payment
 
     def mark_failed(self, db: Session, payment: Payment) -> Payment:

@@ -5,7 +5,7 @@ import httpx
 from app.repositories.attendance_repository import attendance_repo, incident_repo
 from app.schemas.schemas import AttendanceCreate, IncidentCreate
 from app.models.models import Attendance, Incident
-from app.events.publisher import publish_event
+from app.events.publisher import enqueue_event
 from app.config import settings
 
 class AttendanceService:
@@ -42,18 +42,27 @@ class AttendanceService:
                 detail=f"Ya existe registro de asistencia para el estudiante en {data.date}"
             )
 
-        attendance = attendance_repo.create(db, data)
-
-        await publish_event("AttendanceRecorded", {
-            "attendanceId": attendance.id,
-            "studentId":    attendance.student_id,
-            "schoolId":     attendance.school_id,
-            "date":         attendance.date,
-            "status":       attendance.status.value,
-            "studentName":  attendance.student_name,
-        })
-
-        return attendance
+        try:
+            attendance = attendance_repo.create(db, data)
+            enqueue_event(
+                db,
+                "AttendanceRecorded",
+                {
+                    "attendanceId": attendance.id,
+                    "studentId":    attendance.student_id,
+                    "schoolId":     attendance.school_id,
+                    "date":         attendance.date,
+                    "status":       attendance.status.value,
+                    "studentName":  attendance.student_name,
+                },
+                deduplication_key=f"AttendanceRecorded:{attendance.id}",
+            )
+            db.commit()
+            db.refresh(attendance)
+            return attendance
+        except Exception:
+            db.rollback()
+            raise
 
     def get_student_attendance(self, db: Session, student_id: str) -> List[Attendance]:
         return attendance_repo.get_by_student(db, student_id)
@@ -61,19 +70,28 @@ class AttendanceService:
     # INCIDENTES
 
     async def report_incident(self, db: Session, data: IncidentCreate) -> Incident:
-        incident = incident_repo.create(db, data)
-
-        await publish_event("IncidentReported", {
-            "incidentId":  incident.id,
-            "studentId":   incident.student_id,
-            "schoolId":    incident.school_id,
-            "type":        incident.type.value,
-            "description": incident.description,
-            "severity":    incident.severity.value,
-            "studentName": incident.student_name,
-        })
-
-        return incident
+        try:
+            incident = incident_repo.create(db, data)
+            enqueue_event(
+                db,
+                "IncidentReported",
+                {
+                    "incidentId":  incident.id,
+                    "studentId":   incident.student_id,
+                    "schoolId":    incident.school_id,
+                    "type":        incident.type.value,
+                    "description": incident.description,
+                    "severity":    incident.severity.value,
+                    "studentName": incident.student_name,
+                },
+                deduplication_key=f"IncidentReported:{incident.id}",
+            )
+            db.commit()
+            db.refresh(incident)
+            return incident
+        except Exception:
+            db.rollback()
+            raise
 
     def get_student_incidents(self, db: Session, student_id: str) -> List[Incident]:
         return incident_repo.get_by_student(db, student_id)
