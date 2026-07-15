@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -22,11 +23,12 @@ def login(body: LoginRequest):
 
 @router.get("/dashboard", response_model=DashboardResponse, tags=["Dashboard"])
 async def get_dashboard(
+    school_id: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     _: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    return await analytics_service.get_dashboard(db, credentials.credentials)
+    return await analytics_service.get_dashboard(db, credentials.credentials, school_id)
 
 # HEALTH CHECK
 
