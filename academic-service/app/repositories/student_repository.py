@@ -15,6 +15,9 @@ class StudentRepository:
     def get_by_cedula(self, db: Session, cedula: str) -> Optional[Student]:
         return db.query(Student).filter(Student.cedula == cedula).first()
 
+    def get_by_email(self, db: Session, email: str) -> Optional[Student]:
+        return db.query(Student).filter(Student.email == email).first()
+
     def search(self, db: Session, q: str) -> List[Student]:
         term = f"%{q}%"
         return db.query(Student).filter(
@@ -52,8 +55,8 @@ class EnrollmentRepository:
             Enrollment.status == EnrollmentStatusEnum.ACTIVA
         ).first()
 
-    def create(self, db: Session, data: EnrollmentCreate) -> Enrollment:
-        enrollment = Enrollment(**data.model_dump())
+    def create(self, db: Session, data: EnrollmentCreate, school_id: str) -> Enrollment:
+        enrollment = Enrollment(**data.model_dump(), school_id=school_id)
         db.add(enrollment)
         db.commit()
         db.refresh(enrollment)

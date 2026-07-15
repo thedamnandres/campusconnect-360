@@ -1,7 +1,10 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
 from datetime import datetime
 from app.models.models import FinancialStatusEnum, EnrollmentStatusEnum
+
+# Red de colegios soportada por el sistema (catálogo fijo, sin tabla propia).
+SCHOOL_IDS = {"SCH-GOTITAS", "SCH-SANGABRIEL"}
 
 # STUDENT
 
@@ -15,7 +18,14 @@ class StudentCreate(BaseModel):
     representative_name: Optional[str] = None
     representative_email: Optional[str] = None
     representative_phone: Optional[str] = None
-    school_id: Optional[str] = "SCH-001"
+    school_id: str
+
+    @field_validator("school_id")
+    @classmethod
+    def validate_school_id(cls, value):
+        if value not in SCHOOL_IDS:
+            raise ValueError(f"school_id debe ser uno de: {', '.join(sorted(SCHOOL_IDS))}")
+        return value
 
 class StudentUpdate(BaseModel):
     phone: Optional[str] = None
@@ -51,7 +61,6 @@ class EnrollmentCreate(BaseModel):
     grade: str
     section: Optional[str] = None
     school_year: str
-    school_id: Optional[str] = "SCH-001"
     notes: Optional[str] = None
 
 class EnrollmentResponse(BaseModel):

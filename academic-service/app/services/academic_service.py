@@ -28,6 +28,11 @@ class AcademicService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Ya existe un estudiante con cédula {data.cedula}"
             )
+        if student_repo.get_by_email(db, data.email):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Ya existe un estudiante con correo {data.email}"
+            )
         student = student_repo.create(db, data)
         return student
 
@@ -47,7 +52,9 @@ class AcademicService:
                 detail=f"El estudiante ya tiene matrícula activa para {data.school_year}"
             )
 
-        enrollment = enrollment_repo.create(db, data)
+        # La matrícula siempre pertenece al colegio del estudiante: no se
+        # vuelve a pedir en el formulario ni se acepta un valor distinto.
+        enrollment = enrollment_repo.create(db, data, school_id=student.school_id)
 
         await publish_event("StudentEnrolled", {
             "studentId":           student.id,
